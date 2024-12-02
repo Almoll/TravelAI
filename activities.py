@@ -1,16 +1,22 @@
-# activities.py
-
 import requests
 
 def search_activities_by_square(latitude, longitude, preferences, token):
-    api_url = "https://test.api.amadeus.com/v1/shopping/activities/by-square"
+    """Busca actividades dentro de un área geográfica basada en preferencias del usuario."""
+    
+    # Mapeo de categorías de actividades para las preferencias
     activity_categories = {
-        'aventura': ['outdoor', 'adventure'],
-        'cultura': ['sightseeing', 'cultural'],
-        'relax': ['relax', 'wellness']
+        'aventura': ['outdoor', 'adventure', 'extreme-sports', 'hiking'],
+        'cultura': ['sightseeing', 'cultural', 'museums', 'history', 'art'],
+        'relax': ['wellness', 'spas', 'meditation', 'yoga']
     }
+    
     selected_category = activity_categories.get(preferences, [])
 
+    # Si no se encuentra una categoría, retornamos un mensaje de error
+    if not selected_category:
+        return "No se encontraron actividades que coincidan con tus preferencias."
+
+    api_url = "https://test.api.amadeus.com/v1/shopping/activities/by-square"
     params = {
         "north": latitude + 0.1,
         "south": latitude - 0.1,
@@ -29,18 +35,20 @@ def search_activities_by_square(latitude, longitude, preferences, token):
         if not activities:
             return "No se encontraron actividades según tus preferencias."
 
-        viable_activities = [
-            {"name": activity['name'], "description": activity.get('shortDescription', 'Descripción no disponible')}
-            for activity in activities
-        ]
+        # Filtrar las actividades y mostrar un máximo de 4 actividades
+        viable_activities = {}
+        for activity in activities[:4]:  # Mostrar hasta 4 actividades
+            name = activity.get('name', 'Actividad sin nombre')
+            description = activity.get('shortDescription', 'Descripción no disponible')
+            price = activity.get('price', {}).get('total', 'Precio no disponible')
 
-        # Limitar a 4 actividades y ordenar alfabéticamente por nombre
-        viable_activities = sorted(viable_activities, key=lambda x: x['name'])[:4]
+            # Mostrar el nombre de la actividad con la descripción y el precio
+            viable_activities[name] = {
+                'description': description,
+                'price': price
+            }
 
-        return {
-            activity["name"]: activity["description"]
-            for activity in viable_activities
-        }
+        return viable_activities
     except Exception as e:
         print(f"Error al buscar actividades: {e}")
         return "No se pudo obtener las actividades."
