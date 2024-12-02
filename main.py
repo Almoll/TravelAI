@@ -5,6 +5,26 @@ from flight_search import search_flight_offers
 from accommodation_search import search_accommodation_options
 from restaurants import search_bars_and_restaurants
 from activities import search_activities_by_square
+import requests
+
+def get_city_coordinates(city_name, token):
+    """Obtiene las coordenadas de una ciudad usando la API de OpenCage."""
+    api_url = f"https://api.opencagedata.com/geocode/v1/json"
+    api_key = "tu_api_key_aqui"  # Reemplaza con tu API Key
+    params = {
+        "q": city_name,
+        "key": api_key
+    }
+    response = requests.get(api_url, params=params)
+    data = response.json()
+    
+    if data['results']:
+        lat = data['results'][0]['geometry']['lat']
+        lng = data['results'][0]['geometry']['lng']
+        return lat, lng
+    else:
+        print(f"No se pudieron obtener coordenadas para {city_name}")
+        return None, None
 
 
 def generate_daily_itinerary(day, activities, restaurants):
@@ -28,8 +48,15 @@ def generate_daily_itinerary(day, activities, restaurants):
     return itinerary
 
 
-def create_itinerary(latitude, longitude, preferences, days, daily_budget, token):
+def create_itinerary(city_name, preferences, days, daily_budget, token):
     """Crea un itinerario completo con actividades y restaurantes."""
+    
+    # Obtener coordenadas de la ciudad
+    latitude, longitude = get_city_coordinates(city_name, token)
+    if latitude is None or longitude is None:
+        return []
+
+    # Obtener actividades y restaurantes según las coordenadas y preferencias
     activities = search_activities_by_square(latitude, longitude, preferences, token)
     restaurants = search_bars_and_restaurants(latitude, longitude, daily_budget, token)
 
@@ -51,8 +78,10 @@ def run_travel_planner():
         budget_allocation['transport_per_person'], token
     )
     accommodation_options = search_accommodation_options(budget_allocation['hotel_per_night'])
+    
+    # Crear itinerario con ciudad dinámica
     itinerary = create_itinerary(
-        48.8566, 2.3522, user_data['preferences'], user_data['days'], budget_allocation['daily_expenses'], token
+        user_data['destination'], user_data['preferences'], user_data['days'], budget_allocation['daily_expenses'], token
     )
 
     print("\n--- Resultados ---")
