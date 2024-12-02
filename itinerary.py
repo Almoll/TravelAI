@@ -1,51 +1,34 @@
 # itinerary.py
-
 import random
-from restaurants import search_bars_and_restaurants
-from activities import search_activities_by_square
+from retry_helper import make_amadeus_request_with_retry
 
 def create_itinerary(latitude, longitude, preferences, days, daily_meal_budget, token):
-    print("Generando itinerario detallado...")
-    activities = search_activities_by_square(latitude, longitude, preferences, token)
+    """Crea un itinerario diario con actividades y lugares para comer."""
+    api_url = "https://test.api.amadeus.com/v1/shopping/activities/by-square"
+    activity_categories = {
+        'aventura': ['outdoor', 'adventure'],
+        'cultura': ['sightseeing', 'cultural'],
+        'relax': ['relax', 'wellness']
+    }
+    selected_category = activity_categories.get(preferences, [])
+    params = {
+        "north": latitude + 0.1,
+        "south": latitude - 0.1,
+        "east": longitude + 0.1,
+        "west": longitude - 0.1,
+        "category": ','.join(selected_category)
+    }
+    headers = {"Authorization": f"Bearer {token}"}
 
-    if isinstance(activities, str):
-        print(activities)
-        return []
-
+    response_data = make_amadeus_request_with_retry(api_url, params, headers)
+    activities = response_data.get('data', []) if response_data else []
     itinerary = []
-    available_activities = list(activities.items())
-
-    def get_activity_duration():
-        return random.randint(1, 4)
 
     for day in range(1, days + 1):
-        daily_schedule = f"Día {day}:\n"
-        current_time = 9
-
-        while current_time < 18:
-            if available_activities:
-                activity_name, description = random.choice(available_activities)
-                duration = get_activity_duration()
-
-                start_time = f"{current_time}:00"
-                end_time = f"{current_time + duration}:00"
-                daily_schedule += f"  {start_time} - {end_time}: {activity_name}\n"
-
-                current_time += duration
-                if current_time < 18:
-                    daily_schedule += f"  {current_time}:00 - {current_time + 2}:00: Tiempo para comer\n"
-                    places = search_bars_and_restaurants(latitude, longitude, daily_meal_budget, token)
-                    if isinstance(places, dict):
-                        for place, price in places.items():
-                            daily_schedule += f"    Opción: {place} - {price}\n"
-                    else:
-                        daily_schedule += f"    {places}\n"
-                    current_time += 2
-                available_activities.remove((activity_name, description))
-            else:
-                daily_schedule += f"  {current_time}:00 - 18:00: Día libre\n"
-                break
-
-        itinerary.append(daily_schedule)
+        if activities:
+            selected = random.choice(activities)
+            itinerary.append(f"Día {day}: {selected['name']} - {selected.get('shortDescription', 'Sin descripción')}")
+        else:
+            itinerary.append(f"Día {day}: Día libre.")
 
     return itinerary

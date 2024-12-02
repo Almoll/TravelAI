@@ -20,13 +20,22 @@ def search_bars_and_restaurants(latitude, longitude, budget, token):
         response_data = response.json()
 
         places = response_data.get('data', [])
-        viable_places = {}
-        for place in places[:5]:
-            price = random.randint(10, 50)
+        viable_places = []
+        for place in places:
+            price = random.randint(10, 50)  # Simulación de precios
             if price <= budget:
-                viable_places[place['name']] = f"{price} EUR"
+                viable_places.append({"name": place['name'], "price": price})
 
-        return viable_places if viable_places else "No hay lugares dentro del presupuesto."
+        # Limitar a 4 opciones y ordenar por precio ascendente
+        viable_places = sorted(viable_places, key=lambda x: x['price'])[:4]
+
+        if not viable_places:
+            return "No hay lugares dentro del presupuesto."
+
+        return {
+            place["name"]: f"{place['price']} EUR"
+            for place in viable_places
+        }
     except Exception as e:
         print(f"Error al buscar restaurantes: {e}")
         return "Error al buscar bares/restaurantes."

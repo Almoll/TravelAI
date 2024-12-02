@@ -29,11 +29,18 @@ def search_activities_by_square(latitude, longitude, preferences, token):
         if not activities:
             return "No se encontraron actividades según tus preferencias."
 
-        viable_activities = {
-            activity['name']: activity.get('shortDescription', 'Descripción no disponible')
+        viable_activities = [
+            {"name": activity['name'], "description": activity.get('shortDescription', 'Descripción no disponible')}
             for activity in activities
+        ]
+
+        # Limitar a 4 actividades y ordenar alfabéticamente por nombre
+        viable_activities = sorted(viable_activities, key=lambda x: x['name'])[:4]
+
+        return {
+            activity["name"]: activity["description"]
+            for activity in viable_activities
         }
-        return viable_activities
     except Exception as e:
         print(f"Error al buscar actividades: {e}")
         return "No se pudo obtener las actividades."
