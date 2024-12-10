@@ -6,13 +6,18 @@ from accommodation_search import search_accommodation_options
 from restaurants import search_bars_and_restaurants
 from activities import search_activities_by_square
 
-
+#las actividades dan restaurantes y tambien dan los restaurantes restaurantes preguntar chatgpt que solucione eso
 def generate_daily_itinerary(day, activities, restaurants):
     """Genera un itinerario detallado para un día específico con múltiples restaurantes."""
     itinerary = []
     time_slots = ["9:00 AM", "12:00 PM", "3:00 PM", "6:00 PM", "8:00 PM"]
     activities_list = list(activities.items())[:2]  # Máximo 2 actividades por día
-    restaurants_list = list(restaurants.items())[:6]  # Máximo 6 restaurantes por día
+
+    # Verificamos si restaurants es un diccionario
+    if isinstance(restaurants, dict):
+        restaurants_list = list(restaurants.items())[:6]  # Máximo 6 restaurantes por día
+    else:
+        restaurants_list = []  # Si no es un diccionario, no mostramos restaurantes
 
     itinerary.append(f"Día {day}:")
     for i, time in enumerate(time_slots):
@@ -26,6 +31,7 @@ def generate_daily_itinerary(day, activities, restaurants):
                     restaurant = restaurants_list.pop(0)
                     itinerary.append(f"      - {restaurant[0]} ({restaurant[1]})")
     return itinerary
+
 
 
 def create_itinerary(latitude, longitude, preferences, days, daily_budget, token):
