@@ -11,19 +11,21 @@ def generate_daily_itinerary(day, activities, restaurants):
     """Genera un itinerario detallado para un día específico con múltiples restaurantes."""
     itinerary = []
     time_slots = ["9:00 AM", "12:00 PM", "3:00 PM", "6:00 PM", "8:00 PM"]
-    activities_list = list(activities.items())[:2]  # Máximo 2 actividades por día
+    
+    # Asegurar que las actividades y los restaurantes sean diccionarios
+    if not isinstance(activities, dict):
+        activities = {}
+    if not isinstance(restaurants, dict):
+        restaurants = {}
 
-    # Verificamos si restaurants es un diccionario
-    if isinstance(restaurants, dict):
-        restaurants_list = list(restaurants.items())[:6]  # Máximo 6 restaurantes por día
-    else:
-        restaurants_list = []  # Si no es un diccionario, no mostramos restaurantes
+    activities_list = list(activities.items())[:2]  # Máximo 2 actividades por día
+    restaurants_list = list(restaurants.items())[:6]  # Máximo 6 restaurantes por día
 
     itinerary.append(f"Día {day}:")
     for i, time in enumerate(time_slots):
         if i % 2 == 0 and activities_list:  # Actividad en horario par
             activity = activities_list.pop(0)
-            itinerary.append(f"   {time} - Actividad: {activity[0]} - {activity[1]}")
+            itinerary.append(f"   {time} - Actividad: {activity[0]} - {activity[1]['description']} ({activity[1]['price']})")
         elif restaurants_list:  # Restaurantes en horario impar
             itinerary.append(f"   {time} - Restaurantes recomendados:")
             for _ in range(3):  # Mostrar hasta 3 restaurantes por franja
@@ -34,10 +36,19 @@ def generate_daily_itinerary(day, activities, restaurants):
 
 
 
+
 def create_itinerary(latitude, longitude, preferences, days, daily_budget, token):
     """Crea un itinerario completo con actividades y restaurantes."""
     activities = search_activities_by_square(latitude, longitude, preferences, token)
     restaurants = search_bars_and_restaurants(latitude, longitude, daily_budget, token)
+
+    # Validar respuestas antes de pasar a generar el itinerario
+    if not isinstance(activities, dict):
+        print("No se encontraron actividades válidas.")
+        activities = {}
+    if not isinstance(restaurants, dict):
+        print("No se encontraron restaurantes válidos.")
+        restaurants = {}
 
     full_itinerary = []
     for day in range(1, days + 1):

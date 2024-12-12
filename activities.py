@@ -1,20 +1,19 @@
 import requests
 
 def search_activities_by_square(latitude, longitude, preferences, token):
-    """Busca actividades dentro de un área geográfica basada en preferencias del usuario."""
+    """Busca actividades culturales, de aventura o relajación en el área."""
     
     # Mapeo de categorías de actividades para las preferencias
     activity_categories = {
         'aventura': ['outdoor', 'adventure', 'extreme-sports', 'hiking'],
-        'cultura': ['sightseeing', 'cultural', 'museums', 'history', 'art'],
+        'cultura': ['sightseeing', 'cultural', 'museums', 'history', 'art', 'landmark'],
         'relax': ['wellness', 'spas', 'meditation', 'yoga']
     }
     
     selected_category = activity_categories.get(preferences, [])
 
-    # Si no se encuentra una categoría, retornamos un mensaje de error
     if not selected_category:
-        return "No se encontraron actividades que coincidan con tus preferencias."
+        return {}
 
     api_url = "https://test.api.amadeus.com/v1/shopping/activities/by-square"
     params = {
@@ -33,22 +32,25 @@ def search_activities_by_square(latitude, longitude, preferences, token):
 
         activities = response_data.get('data', [])
         if not activities:
-            return "No se encontraron actividades según tus preferencias."
+            return {}
 
-        # Filtrar las actividades y mostrar un máximo de 4 actividades
-        viable_activities = {}
-        for activity in activities[:4]:  # Mostrar hasta 4 actividades
+        # Filtrar actividades no deseadas (por ejemplo, relacionadas con comida)
+        filtered_activities = {}
+        for activity in activities:
             name = activity.get('name', 'Actividad sin nombre')
             description = activity.get('shortDescription', 'Descripción no disponible')
             price = activity.get('price', {}).get('total', 'Precio no disponible')
+            
+            # Filtramos lugares relacionados con comida
+            if "food" in name.lower() or "restaurant" in name.lower():
+                continue  # Ignoramos los lugares relacionados con comida
 
-            # Mostrar el nombre de la actividad con la descripción y el precio
-            viable_activities[name] = {
+            filtered_activities[name] = {
                 'description': description,
                 'price': price
             }
 
-        return viable_activities
+        return filtered_activities
     except Exception as e:
         print(f"Error al buscar actividades: {e}")
-        return "No se pudo obtener las actividades."
+        return {}

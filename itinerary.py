@@ -1,34 +1,31 @@
-# itinerary.py
 import random
-from retry_helper import make_amadeus_request_with_retry
+from activities import search_activities_by_square
+from restaurants import search_bars_and_restaurants
 
 def create_itinerary(latitude, longitude, preferences, days, daily_meal_budget, token):
     """Crea un itinerario diario con actividades y lugares para comer."""
-    api_url = "https://test.api.amadeus.com/v1/shopping/activities/by-square"
-    activity_categories = {
-        'aventura': ['outdoor', 'adventure'],
-        'cultura': ['sightseeing', 'cultural'],
-        'relax': ['relax', 'wellness']
-    }
-    selected_category = activity_categories.get(preferences, [])
-    params = {
-        "north": latitude + 0.1,
-        "south": latitude - 0.1,
-        "east": longitude + 0.1,
-        "west": longitude - 0.1,
-        "category": ','.join(selected_category)
-    }
-    headers = {"Authorization": f"Bearer {token}"}
+    activities = search_activities_by_square(latitude, longitude, preferences, token)
+    restaurants = search_bars_and_restaurants(latitude, longitude, daily_meal_budget, token)
 
-    response_data = make_amadeus_request_with_retry(api_url, params, headers)
-    activities = response_data.get('data', []) if response_data else []
     itinerary = []
-
     for day in range(1, days + 1):
+        itinerary.append(f"Día {day}:")
+
+        # Seleccionamos actividades
         if activities:
-            selected = random.choice(activities)
-            itinerary.append(f"Día {day}: {selected['name']} - {selected.get('shortDescription', 'Sin descripción')}")
+            activity_name, activity_info = activities.popitem()
+            itinerary.append(f"   Actividad: {activity_name} - {activity_info['description']} (Precio: {activity_info['price']})")
         else:
-            itinerary.append(f"Día {day}: Día libre.")
+            itinerary.append("   Actividad: Día libre.")
+
+        # Seleccionamos restaurantes
+        if restaurants:
+            itinerary.append("   Restaurantes recomendados:")
+            for _ in range(3):  # Mostrar hasta 3 restaurantes
+                if restaurants:
+                    restaurant_name, price = restaurants.popitem()
+                    itinerary.append(f"      - {restaurant_name}: {price}")
+        else:
+            itinerary.append("   Restaurantes: No hay restaurantes disponibles.")
 
     return itinerary
