@@ -7,6 +7,7 @@ from accommodation_search import search_accommodation_options
 from restaurants import search_bars_and_restaurants
 from activities import search_activities_by_square
 import sqlite3
+import bcrypt
 
 # --- Database Setup ---
 def setup_database():
@@ -35,24 +36,33 @@ def setup_database():
 setup_database()
 
 # --- Helper Functions ---
+
 def register_user(username, email, password):
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     conn = sqlite3.connect("travel_planner.db")
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (username, email, password) VALUES (?, ?, ?)", (username, email, password))
+        cursor.execute("INSERT INTO users (username, email, password) VALUES (?, ?, ?)", (username, email, hashed_password))
         conn.commit()
         messagebox.showinfo("Registro exitoso", "Usuario registrado correctamente.")
     except sqlite3.IntegrityError:
         messagebox.showerror("Error", "El usuario o el correo ya existen.")
     conn.close()
 
+
 def login_user(email, password):
     conn = sqlite3.connect("travel_planner.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username FROM users WHERE email = ? AND password = ?", (email, password))
+    cursor.execute("SELECT id, username, password FROM users WHERE email = ?", (email,))
     user = cursor.fetchone()
     conn.close()
-    return user
+
+    if user:
+        user_id, username, hashed_password = user
+        if bcrypt.checkpw(password.encode('utf-8'), hashed_password):
+            return (user_id, username)
+    
+    return None  # Si las credenciales son incorrectas
 
 def save_trip(user_id, trip_name, details):
     conn = sqlite3.connect("travel_planner.db")
@@ -72,7 +82,7 @@ def get_user_trips(user_id):
 # --- GUI Functions ---
 def show_main_screen():
     root = tk.Tk()
-    root.title("Travel Planner")
+    root.title("TravelAI")
 
     def guest_mode():
         root.destroy()
@@ -146,6 +156,10 @@ def show_registration_screen():
     tk.Button(register_screen, text="Registrar", command=register).grid(row=3, column=0, columnspan=2, pady=10)
 
     register_screen.mainloop()
+    
+def logout(current_window):
+    current_window.destroy()
+    show_main_screen()
 
 def show_user_dashboard(user):
     dashboard = tk.Tk()
@@ -157,21 +171,219 @@ def show_user_dashboard(user):
     def plan_trip():
         dashboard.destroy()
         show_trip_planner(user_id)
+        
 
     def view_trips():
         trips = get_user_trips(user_id)
         if trips:
             trip_screen = tk.Toplevel(dashboard)
             trip_screen.title("Tus Viajes")
+
+            # Crear un contenedor con scroll
+            canvas = tk.Canvas(trip_screen)
+            scrollbar = tk.Scrollbar(trip_screen, orient="vertical", command=canvas.yview)
+            scrollable_frame = tk.Frame(canvas)
+
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+
+            # Función para borrar un viaje
+            def delete_trip(trip_id, trip_frame):
+                conn = sqlite3.connect("travel_planner.db")
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
+                conn.commit()
+                conn.close()
+                trip_frame.destroy()
+                messagebox.showinfo("Eliminado", "El viaje ha sido eliminado.")
+
+            # Función para editar un viaje
+            def edit_trip(trip_id, old_details):
+                trip_screen.destroy()  # Cerrar el historial
+                # Reusar el planificador con los datos antiguos
+                show_trip_editor(user_id, trip_id, old_details)
+
+            # Crear pestañas (acordeones)
             for trip_id, trip_name, details in trips:
-                tk.Label(trip_screen, text=f"{trip_name}: {details}").pack()
+                trip_frame = tk.Frame(scrollable_frame, bd=2, relief="groove")
+                trip_frame.pack(fill="x", pady=5, padx=5)
+
+                # Crear un título desplegable
+                is_expanded = tk.BooleanVar(value=False)
+
+                def toggle_details(frame, text_widget, expand_var):
+                    if not expand_var.get():
+                        text_widget.pack(padx=10, pady=5)
+                        expand_var.set(True)
+                    else:
+                        text_widget.pack_forget()
+                        expand_var.set(False)
+
+                title_button = tk.Button(
+                    trip_frame, text=trip_name, font=("Arial", 12, "bold"),
+                    command=lambda f=trip_frame, t=details, e=is_expanded: toggle_details(f, text_widget, e)
+                )
+                title_button.pack(fill="x")
+
+                # Contenido del viaje (oculto inicialmente)
+                text_widget = tk.Text(trip_frame, wrap="word", height=5, width=80)
+                text_widget.insert(tk.END, details)
+                text_widget.config(state="disabled")
+
+                # Botones de acciones
+                button_frame = tk.Frame(trip_frame)
+                button_frame.pack(pady=5)
+
+                delete_button = tk.Button(button_frame, text="Borrar", command=lambda tid=trip_id, tf=trip_frame: delete_trip(tid, tf))
+                delete_button.grid(row=0, column=0, padx=5)
+
+                edit_button = tk.Button(button_frame, text="Editar", command=lambda tid=trip_id, d=details: edit_trip(tid, d))
+                edit_button.grid(row=0, column=1, padx=5)
+
         else:
             messagebox.showinfo("Sin viajes", "No tienes viajes guardados.")
+    
+    def logout(current_window):
+       current_window.destroy()
+       show_main_screen()
+
 
     tk.Button(dashboard, text="Planificar un Viaje", command=plan_trip).pack(pady=10)
     tk.Button(dashboard, text="Ver Mis Viajes", command=view_trips).pack(pady=10)
+    tk.Button(dashboard, text="Cerrar Sesión", command=lambda: logout(dashboard)).pack(pady=10)
 
     dashboard.mainloop()
+
+def show_trip_editor(user_id, trip_id, old_details):
+    planner = tk.Tk()
+    planner.title("Editar Viaje")
+
+    # Extraer los datos antiguos del cuestionario del texto almacenado
+    details_lines = old_details.split("\n")
+    old_budget = next((line.split(": ")[1] for line in details_lines if line.startswith("Presupuesto")), "1000")
+    old_origin = next((line.split(": ")[1] for line in details_lines if line.startswith("Origen")), "")
+    old_destination = next((line.split(": ")[1] for line in details_lines if line.startswith("Destino")), "")
+    old_departure_date = next((line.split(": ")[1] for line in details_lines if line.startswith("Fecha de Salida")), "")
+    old_people = next((line.split(": ")[1] for line in details_lines if line.startswith("Número de Personas")), "1")
+    old_days = next((line.split(": ")[1] for line in details_lines if line.startswith("Días de Viaje")), "1")
+    old_preferences = next((line.split(": ")[1] for line in details_lines if line.startswith("Preferencias")), "")
+
+    # Crear entradas como en el planificador original, pero con valores cargados
+    tk.Label(planner, text="Presupuesto (EUR):").grid(row=0, column=0)
+    budget_entry = tk.Entry(planner)
+    budget_entry.insert(0, old_budget)
+    budget_entry.grid(row=0, column=1)
+
+    tk.Label(planner, text="Origen (Código IATA):").grid(row=1, column=0)
+    origin_entry = tk.Entry(planner)
+    origin_entry.insert(0, old_origin)
+    origin_entry.grid(row=1, column=1)
+
+    tk.Label(planner, text="Destino (Código IATA):").grid(row=2, column=0)
+    destination_entry = tk.Entry(planner)
+    destination_entry.insert(0, old_destination)
+    destination_entry.grid(row=2, column=1)
+
+    tk.Label(planner, text="Fecha de Salida (YYYY-MM-DD):").grid(row=3, column=0)
+    departure_date_entry = tk.Entry(planner)
+    departure_date_entry.insert(0, old_departure_date)
+    departure_date_entry.grid(row=3, column=1)
+
+    tk.Label(planner, text="Número de Personas:").grid(row=4, column=0)
+    people_entry = tk.Entry(planner)
+    people_entry.insert(0, old_people)
+    people_entry.grid(row=4, column=1)
+
+    tk.Label(planner, text="Días de Viaje:").grid(row=5, column=0)
+    days_entry = tk.Entry(planner)
+    days_entry.insert(0, old_days)
+    days_entry.grid(row=5, column=1)
+
+    tk.Label(planner, text="Preferencias (aventura, cultura, relax):").grid(row=6, column=0)
+    preferences_entry = tk.Entry(planner)
+    preferences_entry.insert(0, old_preferences)
+    preferences_entry.grid(row=6, column=1)
+
+    # Función para actualizar el viaje
+    def update_trip():
+        try:
+            # Recoger datos actualizados del formulario
+            budget = int(budget_entry.get())
+            origin = origin_entry.get().upper()
+            destination = destination_entry.get().upper()
+            departure_date = departure_date_entry.get()
+            people = int(people_entry.get())
+            days = int(days_entry.get())
+            preferences = preferences_entry.get()
+
+            # Token y asignación de presupuesto
+            token = get_amadeus_token()
+            budget_allocation = allocate_budget(budget, days, people)
+
+            # Opciones de transporte
+            transport_options = search_flight_offers(destination, origin, departure_date, budget_allocation['transport_per_person'], token)
+            if not transport_options:
+                transport_options = ["No se encontraron opciones de vuelo."]
+
+            # Opciones de alojamiento
+            accommodation_options = search_accommodation_options(budget_allocation['hotel_per_night'])
+            if not accommodation_options:
+                accommodation_options = ["No se encontraron opciones de alojamiento."]
+
+            # Coordenadas e itinerario
+            latitude, longitude = get_coordinates(destination, token)
+            itinerary = create_itinerary(
+                latitude, longitude, preferences, days,
+                budget_allocation['daily_expenses'], token
+            )
+            if not itinerary:
+                itinerary = ["No se pudo generar el itinerario."]
+
+            # Crear nuevos detalles para guardar
+            new_details = (
+                f"Presupuesto: {budget}\n"
+                f"Origen: {origin}\n"
+                f"Destino: {destination}\n"
+                f"Fecha de Salida: {departure_date}\n"
+                f"Número de Personas: {people}\n"
+                f"Días de Viaje: {days}\n"
+                f"Preferencias: {preferences}\n\n"
+                f"Itinerario:\n" + "\n".join(itinerary)
+            )
+
+            # Guardar los nuevos detalles en la base de datos
+            conn = sqlite3.connect("travel_planner.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE trips SET details = ? WHERE id = ?", (new_details, trip_id))
+            conn.commit()
+            conn.close()
+
+            messagebox.showinfo("Actualizado", "El viaje ha sido actualizado.")
+            planner.destroy()
+            show_user_dashboard((user_id, "Usuario"))
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Ha ocurrido un error: {str(e)}")
+
+    tk.Button(planner, text="Actualizar Viaje", command=update_trip).grid(row=7, column=0, columnspan=2, pady=10)
+
+    # Botón para regresar
+    def go_back():
+        planner.destroy()
+        show_user_dashboard((user_id, "Usuario"))
+
+    tk.Button(planner, text="Atrás", command=go_back).grid(row=8, column=0, columnspan=2)
+
+    planner.mainloop()
+
 
 def show_trip_planner(user_id):
     planner = tk.Tk()
@@ -338,4 +550,3 @@ def generate_daily_itinerary(day, activities, restaurants):
 # Inicializar la aplicación principal
 if __name__ == "__main__":
     show_main_screen()
-
