@@ -30,6 +30,16 @@ def setup_database():
         FOREIGN KEY(user_id) REFERENCES users(id)
     )
     """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        comment TEXT NOT NULL,
+        date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -63,6 +73,26 @@ def login_user(email, password):
             return (user_id, username)
     
     return None  # Si las credenciales son incorrectas
+
+def save_comment(user_id, comment):
+    conn = sqlite3.connect("travel_planner.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO comments (user_id, comment) VALUES (?, ?)", (user_id, comment))
+    conn.commit()
+    conn.close()
+
+def get_comments():
+    conn = sqlite3.connect("travel_planner.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT users.username, comments.comment, comments.date_created
+    FROM comments
+    JOIN users ON comments.user_id = users.id
+    ORDER BY comments.date_created DESC
+    """)
+    comments = cursor.fetchall()
+    conn.close()
+    return comments
 
 def save_trip(user_id, trip_name, details):
     conn = sqlite3.connect("travel_planner.db")
@@ -258,6 +288,7 @@ def show_user_dashboard(user):
 
     tk.Button(dashboard, text="Planificar un Viaje", command=plan_trip).pack(pady=10)
     tk.Button(dashboard, text="Ver Mis Viajes", command=view_trips).pack(pady=10)
+    tk.Button(dashboard, text="Comentarios y Solicitudes", command=lambda: show_comments_screen(user_id)).pack(pady=10)
     tk.Button(dashboard, text="Cerrar Sesión", command=lambda: logout(dashboard)).pack(pady=10)
 
     dashboard.mainloop()
@@ -546,6 +577,49 @@ def generate_daily_itinerary(day, activities, restaurants):
                     restaurant = restaurants_list.pop(0)
                     itinerary.append(f"      - {restaurant[0]} ({restaurant[1]})")
     return itinerary
+
+def show_comments_screen(user_id):
+    comments_screen = tk.Tk()
+    comments_screen.title("Comentarios y Solicitudes")
+
+    tk.Label(comments_screen, text="Tus Comentarios", font=("Arial", 16)).pack(pady=10)
+
+    # Mostrar los comentarios existentes
+    comments_frame = tk.Frame(comments_screen)
+    comments_frame.pack(pady=10)
+    
+    comments = get_comments()
+    if comments:
+        for username, comment, date_created in comments:
+            tk.Label(comments_frame, text=f"{username} ({date_created}):", font=("Arial", 10, "bold")).pack(anchor="w")
+            tk.Label(comments_frame, text=comment, wraplength=500, justify="left").pack(anchor="w", padx=10, pady=5)
+    else:
+        tk.Label(comments_frame, text="No hay comentarios aún.").pack()
+
+    # Área para enviar un comentario nuevo
+    tk.Label(comments_screen, text="Enviar un nuevo comentario:", font=("Arial", 12)).pack(pady=10)
+    comment_entry = tk.Text(comments_screen, wrap=tk.WORD, height=5, width=60)
+    comment_entry.pack(pady=5)
+
+    def submit_comment():
+        comment = comment_entry.get("1.0", tk.END).strip()
+        if comment:
+            save_comment(user_id, comment)
+            messagebox.showinfo("Gracias", "Tu comentario ha sido enviado.")
+            comments_screen.destroy()
+            show_comments_screen(user_id)
+        else:
+            messagebox.showerror("Error", "El comentario no puede estar vacío.")
+
+    tk.Button(comments_screen, text="Enviar", command=submit_comment).pack(pady=10)
+
+    def go_back():
+        comments_screen.destroy()
+        show_user_dashboard(user_id)
+
+    tk.Button(comments_screen, text="Atrás", command=go_back).pack(pady=10)
+
+    comments_screen.mainloop()
 
 # Inicializar la aplicación principal
 if __name__ == "__main__":
