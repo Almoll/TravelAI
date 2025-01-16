@@ -109,6 +109,8 @@ def get_user_trips(user_id):
     conn.close()
     return trips
 
+current_user_id = None  # Variable global para el usuario autenticado
+
 # --- GUI Functions ---
 def show_main_screen():
     root = tk.Tk()
@@ -399,7 +401,7 @@ def show_trip_editor(user_id, trip_id, old_details):
 
             messagebox.showinfo("Actualizado", "El viaje ha sido actualizado.")
             planner.destroy()
-            show_user_dashboard((user_id, "Usuario"))
+            
 
         except Exception as e:
             messagebox.showerror("Error", f"Ha ocurrido un error: {str(e)}")
@@ -409,7 +411,7 @@ def show_trip_editor(user_id, trip_id, old_details):
     # Botón para regresar
     def go_back():
         planner.destroy()
-        show_user_dashboard((user_id, "Usuario"))
+        
 
     tk.Button(planner, text="Atrás", command=go_back).grid(row=8, column=0, columnspan=2)
 
@@ -615,11 +617,24 @@ def show_comments_screen(user_id):
 
     def go_back():
         comments_screen.destroy()
-        show_user_dashboard(user_id)
+
 
     tk.Button(comments_screen, text="Atrás", command=go_back).pack(pady=10)
 
     comments_screen.mainloop()
+
+def open_user_dashboard():
+    if current_user_id is None:
+        messagebox.showerror("Error", "No estás logueado. Inicia sesión primero.")
+        show_login_screen()
+        return
+    
+    # Abrir la ventana de panel de usuario solo si está logueado
+    user_dashboard_window = tk.Toplevel(show_main_screen)  # Toplevel abre una nueva ventana
+    user_dashboard_window.title("Panel de Usuario")
+    
+    # Contenido del panel de usuario
+    user_dashboard_window.mainloop()
 
 # Inicializar la aplicación principal
 if __name__ == "__main__":
